@@ -83,11 +83,13 @@ if __name__ == '__main__':
     reactor.listenTCP(1111, pb.PBServerFactory(Server()))
     reactor.run()
 ```
+
 And this is code for client:
 
 ```python
 from twisted.spread import pb
 from twisted.internet import reactor
+from twisted.python.failure import Failure
 
 def print_res(res):
     if isinstance(res, Failure):
@@ -105,7 +107,7 @@ if __name__ == '__main__':
     d.addCallback(add_numbers)
     d.addCallback(print_res)
     d.addErrback(print_res)
-    d.addBoth(lambda _: reactor.stop())
+    d.addCallback(lambda _: reactor.stop())
 
     reactor.run()
 ```
@@ -113,6 +115,7 @@ if __name__ == '__main__':
 It fails with
 
 ```
+None
 Unhandled error in Deferred:
 Unhandled Error
 Traceback (most recent call last):
@@ -121,5 +124,6 @@ Failure: twisted.spread.pb.PBConnectionLost: [Failure instance: Traceback (failu
 ``` 
 And here is why... Because `.getRootObject()` has to wait until a network connection has been made and exchange some data, it may take a while, so it returns a `Deferred`. We attach to that deferred `add_numbers` as callback. If and when the connection succeeds and a reference to the remote root object is obtained, this callback is run. The first argument passed to the callback is a remote reference to the distant root object.
 
-With that object we could do `obj.callRemote("add_numbers", 2, 2)`. This also returns a deferred. That deferred has no callbacks and errbacks, and is not stored in any variable. `add_numbers()` returns `None`, then control flow goes to `print_res`
+With that object we could do `obj.callRemote("add_numbers", 2, 2)`. This also returns a deferred. That deferred has no callbacks and errbacks, and is not stored in any variable. `add_numbers()` returns `None`, then control flow goes to `print_res`, which prints `None` and then to `reactor.stop()`. Reactor is stopping and then script finishes it's run, but in the same time deferred returned by `callRemote` is still waiting for reply. Garbage collector calls destructor on that deferred, and it is forced to close connection in non clear fashion.
 
+To fix this we need to force callbacks that follows `add_numbers` to wait for callback returned by `callRemote` to finish. To do that we use deferred chain, and just return deferred from callback. Then next callback will be called only when this receives result, and provided with that result.
