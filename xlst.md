@@ -20,6 +20,13 @@ Don't know why it, but it installs `xsltproc`.
    <a href="mailto:{$email}"><xsl:value-of select="$email"/></a>
 ```
 
+### If expression
+
+```xml
+<xsl:if test="test expression">
+</xsl:if>
+```
+
 ## Links
 
 1. http://linux.dd.com.au/wiki/XSLT_Tutorial
